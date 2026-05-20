@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-api
+  namespace: mlops-pulse
+  labels:
+    app: prediction-api
+    component: model-serving
+spec:
+  replicas: 2          # Two pods for availability — if one dies, traffic goes to the other
+  selector:
+    matchLabels:
+      app: prediction-api
+  # Rolling update strategy: bring up new pods before killing old ones
+  # Zero-downtime deploys — this is what you'd talk about for SLOs
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Allow 1 extra pod during rollout
+      maxUnavailable: 0  # Never have fewer than desired replicas
+  template:
+    metadata:
+      labels:
+        app: prediction-api
+        component: model-serving
+      # This annotation tells Prometheus to scrape this pod automatically
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: prediction-api
+          image: mlops-pulse/prediction-api:latest
+          # Never pull from registry — use the local image we built into Minikube
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5002"
+            - name: MODEL_NAME
+              value: "credit-risk-classifier"
+            - name: MODEL_STAGE
+              value: "latest"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prediction-api
+  namespace: mlops-pulse
+  labels:
+    app: prediction-api
+spec:
+  selector:
+    app: prediction-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# HorizontalPodAutoscaler: automatically scales pod count based on CPU usage
+# Below 50% CPU → scale down. Above 50% → scale up, max 5 pods.
+# This is what "elastic" infrastructure looks like in practice.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: prediction-api-hpa
+  namespace: mlops-pulse
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: prediction-api
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50

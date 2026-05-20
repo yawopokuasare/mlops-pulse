@@ -1,0 +1,9 @@
+# Namespaces are virtual clusters within a cluster.
+# Everything for this project lives in mlops-pulse,
+# isolated from kube-system and any other workloads.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlops-pulse
+  labels:
+    project: mlops-pulse

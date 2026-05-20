@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+
+  mlflow:
+    image: python:3.11-slim
+    working_dir: /mlflow
+    command: >
+      bash -c "pip install mlflow==3.12.0 -q &&
+               mlflow server
+               --host 0.0.0.0
+               --port 5002
+               --backend-store-uri sqlite:///mlflow.db
+               --default-artifact-root /mlflow/artifacts"
+    ports:
+      - "5002:5002"
+    volumes:
+      - mlflow_data:/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  prediction-api:
+    build:
+      context: ./services/prediction-api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5002
+      - MODEL_NAME=credit-risk-classifier
+      - MODEL_STAGE=latest
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  training:
+    build:
+      context: ./services/training
+      dockerfile: Dockerfile
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5002
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    # Runs once and exits — just like a Kubernetes Job
+    restart: "no"
+
+volumes:
+  mlflow_data:
