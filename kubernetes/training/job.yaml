@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: credit-risk-training
+  namespace: mlops-pulse
+  labels:
+    app: training
+    component: model-training
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: training
+        component: model-training
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: training
+          image: docker.io/mlops-pulse/training:latest
+          imagePullPolicy: Never
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5002"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"

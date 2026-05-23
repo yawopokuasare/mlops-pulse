@@ -21,7 +21,7 @@ spec:
         runAsUser: 0
       containers:
         - name: mlflow
-          image: mlops-pulse/training:latest
+          image: docker.io/mlops-pulse/training:latest
           imagePullPolicy: Never
           command:
             - mlflow
@@ -30,21 +30,19 @@ spec:
             - --port=5002
             - --backend-store-uri=sqlite:////mlflow/mlflow.db
             - --default-artifact-root=/mlflow/artifacts
-            - --gunicorn-opts=--timeout=120
+            - --uvicorn-opts=--workers=1
           env:
             - name: MLFLOW_FLASK_SERVER_SECRET_KEY
               value: "mlops-pulse-dev-key"
-            - name: MLFLOW_ENABLE_PROXY_FIX
-              value: "true"
           ports:
             - containerPort: 5002
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "50m"
-            limits:
               memory: "256Mi"
-              cpu: "250m"
+              cpu: "100m"
+            limits:
+              memory: "768Mi"
+              cpu: "500m"
           volumeMounts:
             - name: mlflow-storage
               mountPath: /mlflow
@@ -59,13 +57,13 @@ spec:
             httpGet:
               path: /
               port: 5002
-            initialDelaySeconds: 60
+            initialDelaySeconds: 90
             periodSeconds: 30
             failureThreshold: 5
       volumes:
         - name: mlflow-storage
           emptyDir: {}
- 
+
 ---
 apiVersion: v1
 kind: Service
@@ -82,4 +80,3 @@ spec:
       port: 5002
       targetPort: 5002
   type: ClusterIP
- 
